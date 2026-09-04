@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SettleBot — Razorpay Settlement Assistant</title>
+    <style>
+        :root {
+            --primary: #3395FF;
+            --bg-light: #F7F9FC;
+            --text-dark: #0A2540;
+            --border-color: #E2E8F0;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, sans-serif;
+            background-color: var(--bg-light);
+            color: var(--text-dark);
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+
+        .chat-container {
+            width: 500px;
+            height: 650px;
+            background: #FFFFFF;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+            border: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .header {
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .header h3 {
+            margin: 0;
+            font-size: 16px;
+            font-weight: 600;
+        }
+
+        .lang-badge {
+            background-color: #EBF4FF;
+            color: var(--primary);
+            font-size: 11px;
+            padding: 2px 8px;
+            border-radius: 20px;
+            font-weight: bold;
+        }
+
+        .chat-history {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .message {
+            max-width: 85%;
+            padding: 12px 16px;
+            border-radius: 8px;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+
+        .message.user {
+            background-color: #EBF4FF;
+            color: var(--text-dark);
+            align-self: flex-end;
+        }
+
+        .message.agent {
+            background-color: #F8FAFC;
+            border: 1px solid var(--border-color);
+            align-self: flex-start;
+        }
+
+        .indicator {
+            font-size: 11px;
+            color: #718096;
+            margin-bottom: 4px;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .confidence-tag {
+            display: inline-block;
+            font-size: 11px;
+            margin-top: 8px;
+            font-weight: 500;
+        }
+
+        .confidence-tag.verified {
+            color: #2F855A;
+        }
+
+        .confidence-tag.not_found {
+            color: #C05621;
+        }
+
+        .confidence-tag.clarification {
+            color: #3182CE;
+        }
+
+        .input-area {
+            padding: 16px;
+            border-top: 1px solid var(--border-color);
+            display: flex;
+            gap: 10px;
+            background-color: #FFFFFF;
+        }
+
+        .input-area input {
+            flex: 1;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 10px 12px;
+            font-size: 14px;
+            outline: none;
+        }
+
+        .input-area input:focus {
+            border-color: var(--primary);
+        }
+
+        .input-area button {
+            background-color: var(--primary);
+            color: #FFFFFF;
+            border: none;
+            padding: 10px 16px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .mic-btn {
+            background-color: #F1F5F9 !important;
+            color: var(--text-dark) !important;
+            padding: 10px !important;
+        }
+    </style>
+</head>
+<body>
+
+<div class="chat-container">
+    <div class="header">
+        <h3>SettleBot — Razorpay</h3>
+        <span class="lang-badge" id="lang-indicator">EN</span>
+    </div>
+    
+    <div class="chat-history" id="chat-history">
+        <div class="message agent">
+            How can I help you with your Razorpay settlements today? Aap pichle mahine, aaj ya kisi transactions ke baare me pooch sakte hain.
+        </div>
+    </div>
+    
+    <div class="input-area">
+        <button class="mic-btn" onclick="startVoiceInput()" title="Voice Input">🎤</button>
+        <input type="text" id="query-input" placeholder="Ask about transaction pay_tx_100001 or 'kal ka settlement'..." onkeydown="handleKey(event)">
+        <button onclick="sendMessage()">Send</button>
+    </div>
+</div>
+
+<script>
+    const sessionId = "session_" + Math.random().toString(36).substring(2, 11);
+
+    function handleKey(e) {
+        if (e.key === 'Enter') {
+            sendMessage();
+        }
+    }
+
+    async function sendMessage() {
+        const input = document.getElementById("query-input");
+        const query = input.value.trim();
+        if (!query) return;
+
+        input.value = "";
+        appendMessage(query, "user");
+
+        const hinglishWords = ["aaj", "kal", "parso", "pichle", "hafte", "mahine", "saal", "hua", "tha", "kyu", "paisa"];
+        const isHinglish = hinglishWords.some(w => query.toLowerCase().includes(w));
+        document.getElementById("lang-indicator").innerText = isHinglish ? "HINGLISH" : "EN";
+
+        const loadingId = appendLoading();
+
+        try {
+            const resp = await fetch("/api/chat", {
+                method: "POST",
+                headers: {"Content-Type": "application/json"},
+                body: JSON.stringify({ query: query, session_id: sessionId })
+            });
+            const data = await resp.json();
+            
+            removeLoading(loadingId);
+            appendAgentMessage(data);
+        } catch (e) {
+            removeLoading(loadingId);
+            appendMessage("Unable to connect to server.", "agent");
+        }
+    }
+
+    function appendMessage(text, role) {
+        const history = document.getElementById("chat-history");
+        const div = document.createElement("div");
+        div.className = `message ${role}`;
+        div.innerText = text;
+        history.appendChild(div);
+        history.scrollTop = history.scrollHeight;
+    }
+
+    function appendLoading() {
+        const history = document.getElementById("chat-history");
+        const id = "loading_" + Date.now();
+        const div = document.createElement("div");
+        div.id = id;
+        div.className = "indicator";
+        div.innerHTML = "🔍 Checking live settlement database... <span class='spinner'></span>";
+        history.appendChild(div);
+        history.scrollTop = history.scrollHeight;
+        return id;
+    }
+
+    function removeLoading(id) {
+        const el = document.getElementById(id);
+        if (el) el.remove();
+    }
+
+    function appendAgentMessage(data) {
+        const history = document.getElementById("chat-history");
+        const container = document.createElement("div");
+        container.className = "message agent";
+
+        if (data.metadata && data.metadata.tool_calls_made.length > 0) {
+            const pathDiv = document.createElement("div");
+            pathDiv.className = "indicator";
+            const tc = data.metadata.tool_calls_made[0];
+            pathDiv.innerText = `🔍 Checked: ${tc.tool_name} with ${JSON.stringify(tc.arguments)}`;
+            container.appendChild(pathDiv);
+        }
+
+        const textDiv = document.createElement("div");
+        textDiv.innerText = data.answer;
+        container.appendChild(textDiv);
+
+        if (data.metadata) {
+            const tag = document.createElement("span");
+            tag.className = "confidence-tag";
+            if (data.metadata.grounding_status === "verified") {
+                tag.className += " verified";
+                tag.innerText = "✓ Verified from live settlement data";
+            } else if (data.metadata.grounding_status === "clarification_needed") {
+                tag.className += " clarification";
+                tag.innerText = "⚠ Clarification Needed";
+            } else {
+                tag.className += " not_found";
+                tag.innerText = "⚠ No matching record found";
+            }
+            container.appendChild(tag);
+        }
+
+        const speakBtn = document.createElement("button");
+        speakBtn.style = "background: none; border: none; cursor: pointer; margin-left: 8px; padding: 0;";
+        speakBtn.innerText = "🔊";
+        speakBtn.onclick = () => speak(data.answer);
+        container.appendChild(speakBtn);
+
+        history.appendChild(container);
+        history.scrollTop = history.scrollHeight;
+    }
+
+    function speak(text) {
+        const synth = window.speechSynthesis;
+        if (synth) {
+            const utter = new SpeechSynthesisUtterance(text);
+            synth.speak(utter);
+        }
+    }
+
+    function startVoiceInput() {
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (!SpeechRecognition) {
+            alert("Voice recognition is not supported in this browser.");
+            return;
+        }
+        const rec = new SpeechRecognition();
+        rec.lang = "en-IN";
+        rec.onstart = () => {
+            document.getElementById("query-input").placeholder = "Listening...";
+        };
+        rec.onresult = (event) => {
+            const text = event.results[0][0].transcript;
+            document.getElementById("query-input").value = text;
+            document.getElementById("query-input").placeholder = "Ask about transaction...";
+        };
+        rec.onend = () => {
+            document.getElementById("query-input").placeholder = "Ask about transaction...";
+        };
+        rec.start();
+    }
+</script>
+
+</body>
+</html>
