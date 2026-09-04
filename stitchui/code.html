@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>SettleBot - AI Settlement Assistant</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Plus+Jakarta+Sans:wght@600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            "primary": "#0f172a",
+            "on-primary": "#ffffff",
+            "surface": "#f8fafc",
+            "surface-card": "#ffffff",
+            "surface-muted": "#f1f5f9",
+            "on-surface": "#0f172a",
+            "on-surface-variant": "#64748b",
+            "outline": "#cbd5e1",
+            "outline-variant": "#e2e8f0",
+            "secondary": "#0d9488",
+            "secondary-light": "#ccfbf1",
+            "error": "#e11d48",
+            "error-light": "#ffe4e6"
+          },
+          fontFamily: {
+            sans: ["Inter", "sans-serif"],
+            headline: ["Plus Jakarta Sans", "sans-serif"]
+          }
+        }
+      }
+    };
+  </script>
+<style>
+    @layer base {
+      html, body {
+        margin: 0;
+        padding: 0;
+        height: 100%;
+      }
+      ::-webkit-scrollbar {
+        width: 6px;
+      }
+      ::-webkit-scrollbar-thumb {
+        background: #cbd5e1;
+        border-radius: 9999px;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: #94a3b8;
+      }
+    }
+  </style>
+</head>
+<body class="bg-surface font-sans text-on-surface antialiased h-screen flex flex-col overflow-hidden">
+<!-- TOP APP BAR -->
+<header class="h-14 border-b border-outline-variant bg-surface-card flex-shrink-0 px-6 flex items-center justify-between z-20">
+<div class="flex items-center gap-3">
+<img alt="SettleBot logo" class="h-7 w-7 object-contain rounded-lg" src="https://lh3.googleusercontent.com/aida/AEtjO1US-lABhBbqnBvLODDtba3I6GObMON_EA_2yQXC4PgerrvUudFcE7N2gDf7BoVseFUIrl2fbqvS9E69j8-tA1ccN3fqmO97VaKI_Ak7dbxw33NoI1Jr-GIGFN7rEXoOi8yNLzux0PReVB4T3MVAxWAYtv330cXCwvAE2IT1zYr2drLjLNMQQ0UUMicUbRdEVaZdp59-YzEzQxIxdePLju2j9P-3pQrzL3k63QaRAMxrxNTjxGJYvu5yfgk"/>
+<span class="font-headline font-semibold text-base text-primary tracking-tight">SettleBot</span>
+<span class="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-surface-muted text-on-surface-variant border border-outline-variant/60 ml-2">
+<span class="w-1.5 h-1.5 rounded-full bg-secondary"></span>
+        AI Settlement Assistant
+      </span>
+</div>
+<div class="flex items-center gap-3">
+<div class="flex items-center gap-2.5">
+<span class="hidden md:inline text-xs font-medium text-on-surface-variant">Pooja Sharma</span>
+<img alt="Profile" class="w-8 h-8 rounded-full object-cover border border-outline-variant ring-1 ring-black/5" src="https://lh3.googleusercontent.com/aida/AEtjO1USALv0bI2a2-iI2Sh9MIo86bsu4d3Q-uEQOEVH6ubGQqJ23xIesWp8Dvrwsg97CKcqqVoN7DwZlQ4lUEBvsSrXx_8Ee88Wuek3ajs0_BU4NuUWeU1_Z2yYUcMAJBL3hUub3RcsugFNrOMYN9E0SeQzMsJmizmkMugS7Eh-3kTj02Kun4xC0o5Gv5xYIO1LiRqwwue4L88mU9MYZy5_F2YPL_uMabnGoxkSxMC26yKjsO2tGS8XHD8J468"/>
+</div>
+</div>
+</header>
+<!-- BODY CONTENT (SIDEBAR + MAIN CHAT) -->
+<div class="flex-1 flex overflow-hidden">
+<!-- LEFT SIDEBAR -->
+<aside class="w-64 flex-shrink-0 border-r border-outline-variant bg-surface-card flex flex-col justify-between hidden md:flex">
+<!-- Upper Section -->
+<div class="p-4 flex flex-col gap-4 overflow-y-auto">
+<!-- New Chat Button -->
+<button class="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-primary text-on-primary text-sm font-medium hover:bg-slate-800 active:scale-[0.99] transition-all shadow-sm" type="button">
+<span class="material-symbols-outlined text-lg">add</span>
+          New Chat
+        </button>
+<!-- Conversation History -->
+<div class="flex flex-col gap-4 mt-1">
+<!-- Group: Today -->
+<div class="flex flex-col gap-1">
+<span class="text-[11px] font-semibold text-on-surface-variant uppercase tracking-wider px-2">Today</span>
+<a class="flex items-center gap-2.5 px-3 py-2 rounded-lg bg-surface-muted text-primary text-xs font-medium transition-colors" href="#">
+<span class="material-symbols-outlined text-base text-on-surface-variant">chat_bubble_outline</span>
+<span class="truncate">Razorpay Batch #8492 variance</span>
+</a>
+<a class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-on-surface-variant hover:text-on-surface hover:bg-surface-muted/60 text-xs transition-colors" href="#">
+<span class="material-symbols-outlined text-base text-on-surface-variant">chat_bubble_outline</span>
+<span class="truncate">HDFC Escrow reconciliation</span>
+</a>
+</div>
+<!-- Group: Yesterday -->
+<div class="flex flex-col gap-1">
+<span class="text-[11px] font-semibold text-on-surface-variant uppercase tracking-wider px-2">Yesterday</span>
+<a class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-on-surface-variant hover:text-on-surface hover:bg-surface-muted/60 text-xs transition-colors" href="#">
+<span class="material-symbols-outlined text-base text-on-surface-variant">chat_bubble_outline</span>
+<span class="truncate">UPI Settlement timing</span>
+</a>
+<a class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-on-surface-variant hover:text-on-surface hover:bg-surface-muted/60 text-xs transition-colors" href="#">
+<span class="material-symbols-outlined text-base text-on-surface-variant">chat_bubble_outline</span>
+<span class="truncate">MDR fee calculation</span>
+</a>
+<a class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-on-surface-variant hover:text-on-surface hover:bg-surface-muted/60 text-xs transition-colors" href="#">
+<span class="material-symbols-outlined text-base text-on-surface-variant">chat_bubble_outline</span>
+<span class="truncate">Section 194O tax query</span>
+</a>
+</div>
+</div>
+</div>
+<!-- Bottom User Profile Footer -->
+<div class="p-3 border-t border-outline-variant flex items-center justify-between">
+<div class="flex items-center gap-2.5 truncate">
+<img alt="Pooja Sharma" class="w-8 h-8 rounded-full object-cover" src="https://lh3.googleusercontent.com/aida/AEtjO1USALv0bI2a2-iI2Sh9MIo86bsu4d3Q-uEQOEVH6ubGQqJ23xIesWp8Dvrwsg97CKcqqVoN7DwZlQ4lUEBvsSrXx_8Ee88Wuek3ajs0_BU4NuUWeU1_Z2yYUcMAJBL3hUub3RcsugFNrOMYN9E0SeQzMsJmizmkMugS7Eh-3kTj02Kun4xC0o5Gv5xYIO1LiRqwwue4L88mU9MYZy5_F2YPL_uMabnGoxkSxMC26yKjsO2tGS8XHD8J468"/>
+<div class="flex flex-col truncate">
+<span class="text-xs font-semibold text-primary truncate">Pooja Sharma</span>
+<span class="text-[11px] text-on-surface-variant truncate">Head of Treasury</span>
+</div>
+</div>
+<button class="text-on-surface-variant hover:text-on-surface p-1 rounded-md" title="Settings" type="button">
+<span class="material-symbols-outlined text-lg">settings</span>
+</button>
+</div>
+</aside>
+<!-- MAIN CHAT AREA -->
+<main class="flex-1 flex flex-col justify-between overflow-hidden bg-surface">
+<!-- Scrollable Chat Canvas -->
+<div class="flex-1 overflow-y-auto px-4 py-8 md:px-8">
+<div class="max-w-3xl mx-auto space-y-6">
+<!-- USER MESSAGE -->
+<div class="flex justify-end items-start gap-3">
+<div class="bg-primary text-on-primary rounded-2xl rounded-tr-sm px-4 py-3 text-sm leading-relaxed max-w-xl shadow-sm">
+              Why is my Razorpay settlement ₹1,24,500 less than expected for Batch #8492?
+            </div>
+<img alt="Pooja" class="w-7 h-7 rounded-full object-cover flex-shrink-0 mt-0.5" src="https://lh3.googleusercontent.com/aida/AEtjO1USALv0bI2a2-iI2Sh9MIo86bsu4d3Q-uEQOEVH6ubGQqJ23xIesWp8Dvrwsg97CKcqqVoN7DwZlQ4lUEBvsSrXx_8Ee88Wuek3ajs0_BU4NuUWeU1_Z2yYUcMAJBL3hUub3RcsugFNrOMYN9E0SeQzMsJmizmkMugS7Eh-3kTj02Kun4xC0o5Gv5xYIO1LiRqwwue4L88mU9MYZy5_F2YPL_uMabnGoxkSxMC26yKjsO2tGS8XHD8J468"/>
+</div>
+<!-- ASSISTANT RESPONSE -->
+<div class="flex justify-start items-start gap-3">
+<img alt="SettleBot" class="w-7 h-7 rounded-lg object-contain bg-surface-card p-1 border border-outline-variant flex-shrink-0 mt-0.5" src="https://lh3.googleusercontent.com/aida/AEtjO1US-lABhBbqnBvLODDtba3I6GObMON_EA_2yQXC4PgerrvUudFcE7N2gDf7BoVseFUIrl2fbqvS9E69j8-tA1ccN3fqmO97VaKI_Ak7dbxw33NoI1Jr-GIGFN7rEXoOi8yNLzux0PReVB4T3MVAxWAYtv330cXCwvAE2IT1zYr2drLjLNMQQ0UUMicUbRdEVaZdp59-YzEzQxIxdePLju2j9P-3pQrzL3k63QaRAMxrxNTjxGJYvu5yfgk"/>
+<div class="flex flex-col gap-3 max-w-2xl w-full">
+<!-- Content bubble -->
+<div class="bg-surface-card border border-outline-variant rounded-2xl rounded-tl-sm p-5 text-sm text-on-surface shadow-sm space-y-4">
+<p class="leading-relaxed text-on-surface">
+                  Your settlement variance of <strong class="text-error font-semibold">₹1,24,500.00</strong> on Batch #8492 is caused by two items deducted prior to payout credit:
+                </p>
+<!-- Clean minimal summary table -->
+<div class="border border-outline-variant rounded-xl overflow-hidden text-xs">
+<table class="w-full text-left">
+<tbody class="divide-y divide-outline-variant">
+<tr class="bg-surface-muted/50">
+<td class="py-2 px-3 text-on-surface-variant font-medium">Gross Transaction Volume</td>
+<td class="py-2 px-3 text-right font-medium text-on-surface">₹89,00,000.00</td>
+</tr>
+<tr>
+<td class="py-2 px-3 text-on-surface-variant">Standard MDR Fees + 18% GST</td>
+<td class="py-2 px-3 text-right text-on-surface-variant">-₹2,10,020.00</td>
+</tr>
+<tr class="bg-amber-50/50">
+<td class="py-2 px-3 text-on-surface flex items-center gap-1.5">
+<span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+                          Instant UPI Refund Sweep (4 customer refunds)
+                        </td>
+<td class="py-2 px-3 text-right font-medium text-amber-900">-₹24,500.00</td>
+</tr>
+<tr class="bg-rose-50/50">
+<td class="py-2 px-3 text-on-surface flex items-center gap-1.5">
+<span class="w-1.5 h-1.5 rounded-full bg-error"></span>
+                          Rolling Risk Reserve Hold (1% security buffer)
+                        </td>
+<td class="py-2 px-3 text-right font-semibold text-error">-₹1,00,000.00</td>
+</tr>
+<tr class="bg-surface-muted font-semibold text-on-surface">
+<td class="py-2.5 px-3">Net Deposited into HDFC Escrow</td>
+<td class="py-2.5 px-3 text-right text-secondary">₹85,65,480.00</td>
+</tr>
+</tbody>
+</table>
+</div>
+<!-- Simple plain language note -->
+<p class="text-xs text-on-surface-variant leading-relaxed">
+                  The ₹1,00,000 reserve hold was triggered automatically due to higher promotional transaction volume and is scheduled for automatic release on <strong>T+7 days</strong> into your account.
+                </p>
+</div>
+<!-- Follow-up chips -->
+<div class="flex flex-wrap gap-2 pt-0.5">
+<button class="text-xs font-medium px-3 py-1.5 rounded-full bg-surface-card border border-outline-variant hover:border-slate-400 text-on-surface transition-colors" type="button">
+                  Explain 18% GST calculation
+                </button>
+<button class="text-xs font-medium px-3 py-1.5 rounded-full bg-surface-card border border-outline-variant hover:border-slate-400 text-on-surface transition-colors" type="button">
+                  How to release the reserve hold?
+                </button>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- BOTTOM INPUT AREA -->
+<div class="p-4 md:p-6 bg-surface-card border-t border-outline-variant flex-shrink-0">
+<div class="max-w-3xl mx-auto flex flex-col gap-2">
+<!-- Input Bar -->
+<div class="flex items-center gap-2 px-3 py-2 border border-outline-variant rounded-2xl bg-surface-muted/40 focus-within:bg-surface-card focus-within:border-primary transition-all shadow-sm">
+<button class="text-on-surface-variant hover:text-on-surface p-1 rounded-lg" title="Attach file" type="button">
+<span class="material-symbols-outlined text-xl">attach_file</span>
+</button>
+<input class="flex-1 bg-transparent border-0 text-sm text-on-surface placeholder:text-on-surface-variant focus:outline-none focus:ring-0 px-1" placeholder="Ask SettleBot a question..." type="text"/>
+<button class="w-8 h-8 rounded-xl bg-primary text-on-primary flex items-center justify-center hover:bg-slate-800 transition-colors shadow-sm" title="Send message" type="button">
+<span class="material-symbols-outlined text-sm">arrow_upward</span>
+</button>
+</div>
+<!-- Minimal Disclaimer -->
+<p class="text-center text-[11px] text-on-surface-variant">
+            SettleBot can make mistakes. Check important financial info.
+          </p>
+</div>
+</div>
+</main>
+</div>
+</body></html>
