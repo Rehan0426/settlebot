@@ -289,8 +289,12 @@
     function speak(text) {
         const synth = window.speechSynthesis;
         if (synth) {
-            const utter = new SpeechSynthesisUtterance(text);
-            synth.speak(utter);
+            if (synth.speaking) {
+                synth.cancel();
+            } else {
+                const utter = new SpeechSynthesisUtterance(text);
+                synth.speak(utter);
+            }
         }
     }
 
