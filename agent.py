@@ -122,33 +122,32 @@ def call_tool(name, args):
     return {"error": "unknown_tool"}
 
 def ask_gemini(messages, tool_declarations):
-    model_name = "gemini-3.6-flash"
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={GEMINI_API_KEY}"
-    headers = {"Content-Type": "application/json"}
-    contents = []
-    for msg in messages:
-        contents.append({
-            "role": "user" if msg["role"] == "user" else "model",
-            "parts": [{"text": msg.get("text", "")}]
-        })
-    payload = {
-        "contents": contents,
-        "systemInstruction": {"parts": [{"text": SYSTEM_PROMPT}]},
-        "tools": tool_declarations
-    }
-    try:
-        resp = requests.post(url, headers=headers, json=payload, timeout=10)
-        resp.raise_for_status()
-        return resp.json()
-    except Exception as e:
-        print(f"Gemini {model_name} failed: {str(e)}.")
-        if hasattr(e, 'response') and e.response is not None:
-            print("Gemini response error details:", e.response.text)
-        print("Falling back to standard Gemini 1.5 Flash (v1 endpoint)...")
-        url_alt = f"https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
-        resp = requests.post(url_alt, headers=headers, json=payload, timeout=10)
-        resp.raise_for_status()
-        return resp.json()
+    # This sandbox proxy environment supports the following Gemini models
+    models = ["gemini-3.6-flash", "gemini-3.5-flash", "gemini-3.8-flash", "gemini-3.7-flash"]
+    for model_name in models:
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={GEMINI_API_KEY}"
+        headers = {"Content-Type": "application/json"}
+        contents = []
+        for msg in messages:
+            contents.append({
+                "role": "user" if msg["role"] == "user" else "model",
+                "parts": [{"text": msg.get("text", "")}]
+            })
+        payload = {
+            "contents": contents,
+            "systemInstruction": {"parts": [{"text": SYSTEM_PROMPT}]},
+            "tools": tool_declarations
+        }
+        try:
+            resp = requests.post(url, headers=headers, json=payload, timeout=10)
+            resp.raise_for_status()
+            return resp.json()
+        except Exception as e:
+            print(f"Gemini model {model_name} failed or rate-limited. Error: {str(e)}")
+            if hasattr(e, 'response') and e.response is not None:
+                print(f"Gemini {model_name} error response body:", e.response.text)
+            print(f"Proceeding to check alternative Gemini model in the sandbox proxy...")
+    raise Exception("All supported Gemini models in the sandbox proxy have failed.")
 
 def ask_groq(messages, openai_tools):
     url = "https://api.groq.com/openai/v1/chat/completions"
@@ -160,7 +159,7 @@ def ask_groq(messages, openai_tools):
     for m in messages:
         groq_messages.append({"role": m["role"], "content": m.get("text", "")})
     payload = {
-        "model": "llama-3.3-70b-versatile",
+        "model": "llama-3.1-8b-instant",
         "messages": groq_messages,
         "tools": openai_tools,
         "tool_choice": "auto"
@@ -170,21 +169,10 @@ def ask_groq(messages, openai_tools):
         resp.raise_for_status()
         return resp.json()
     except Exception as e:
-        print(f"Groq llama-3.3-70b-versatile failed: {str(e)}.")
+        print(f"Groq llama-3.1-8b-instant failed: {str(e)}.")
         if hasattr(e, 'response') and e.response is not None:
             print("Groq response error details:", e.response.text)
-        print("Retrying with standard llama-3.1-8b-instant on Groq...")
-        payload["model"] = "llama-3.1-8b-instant"
-        try:
-            resp = requests.post(url, headers=headers, json=payload, timeout=10)
-            resp.raise_for_status()
-            return resp.json()
-        except Exception as ex:
-            print("Fallback to llama-3.1-8b-instant failed. Trying llama3-8b-8192...")
-            payload["model"] = "llama3-8b-8192"
-            resp = requests.post(url, headers=headers, json=payload, timeout=10)
-            resp.raise_for_status()
-            return resp.json()
+        raise e
 
 def run_agent_turn(query, session_memory):
     messages = list(session_memory.history)
