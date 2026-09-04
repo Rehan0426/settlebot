@@ -136,9 +136,16 @@ def ask_gemini(messages, tool_declarations):
         "systemInstruction": {"parts": [{"text": SYSTEM_PROMPT}]},
         "tools": tool_declarations
     }
-    resp = requests.post(url, headers=headers, json=payload, timeout=10)
-    resp.raise_for_status()
-    return resp.json()
+    try:
+        resp = requests.post(url, headers=headers, json=payload, timeout=10)
+        resp.raise_for_status()
+        return resp.json()
+    except Exception as e:
+        print(f"Gemini {model_name} failed: {str(e)}. Falling back to highly-capable gemini-1.5-flash...")
+        url_alt = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
+        resp = requests.post(url_alt, headers=headers, json=payload, timeout=10)
+        resp.raise_for_status()
+        return resp.json()
 
 def ask_groq(messages, openai_tools):
     url = "https://api.groq.com/openai/v1/chat/completions"
@@ -150,14 +157,21 @@ def ask_groq(messages, openai_tools):
     for m in messages:
         groq_messages.append({"role": m["role"], "content": m.get("text", "")})
     payload = {
-        "model": "openai/gpt-oss-120b",
+        "model": "llama-3.3-70b-versatile",
         "messages": groq_messages,
         "tools": openai_tools,
         "tool_choice": "auto"
     }
-    resp = requests.post(url, headers=headers, json=payload, timeout=10)
-    resp.raise_for_status()
-    return resp.json()
+    try:
+        resp = requests.post(url, headers=headers, json=payload, timeout=10)
+        resp.raise_for_status()
+        return resp.json()
+    except Exception as e:
+        print(f"Groq llama-3.3-70b-versatile failed: {str(e)}. Retrying with llama-3.1-8b-instant...")
+        payload["model"] = "llama-3.1-8b-instant"
+        resp = requests.post(url, headers=headers, json=payload, timeout=10)
+        resp.raise_for_status()
+        return resp.json()
 
 def run_agent_turn(query, session_memory):
     messages = list(session_memory.history)
