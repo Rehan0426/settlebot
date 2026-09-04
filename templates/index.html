@@ -56,7 +56,6 @@
           }
         }
         
-        /* Animated Mic styles */
         @keyframes mic-pulse {
             0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
             70% { transform: scale(1.15); box-shadow: 0 0 0 8px rgba(239, 68, 68, 0); }
@@ -179,7 +178,7 @@
 
                 <!-- Input Bar -->
                 <div class="flex items-center gap-2 px-3 py-2 border border-outline-variant rounded-2xl bg-surface-muted/40 focus-within:bg-surface-card focus-within:border-primary transition-all shadow-sm">
-                    <!-- Microhphone controller instead of generic attach file -->
+                    <!-- Microphone controller instead of generic attach file -->
                     <button class="text-on-surface-variant hover:text-on-surface p-1 rounded-lg" id="mic-control" onclick="startVoiceInput()" title="Voice Input" type="button">
                         <span class="material-symbols-outlined text-xl" id="mic-icon">mic</span>
                     </button>
@@ -322,7 +321,9 @@
         container.className = "flex justify-start items-start gap-3";
 
         let toolTraceHtml = "";
-        if (data.metadata && data.metadata.tool_calls_made.length > 0) {
+        const hasToolCalls = data.metadata && data.metadata.tool_calls_made && data.metadata.tool_calls_made.length > 0;
+        
+        if (hasToolCalls) {
             const tc = data.metadata.tool_calls_made[0];
             toolTraceHtml = `
                 <div class="text-[11px] text-on-surface-variant bg-surface-muted px-2.5 py-1 rounded-md mb-2 inline-flex items-center gap-1.5 font-mono">
@@ -335,7 +336,8 @@
         let confidenceHtml = "";
         if (data.metadata) {
             const status = data.metadata.grounding_status;
-            if (status === "verified") {
+            // Only show verified tag if a live database tool was actually called!
+            if (status === "verified" && hasToolCalls) {
                 confidenceHtml = `
                     <div class="flex items-center gap-1.5 text-xs text-emerald-700 font-semibold mt-1">
                         <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
@@ -349,7 +351,7 @@
                         ⚠ Clarification Needed
                     </div>
                 `;
-            } else {
+            } else if (status === "not_found" && hasToolCalls) {
                 confidenceHtml = `
                     <div class="flex items-center gap-1.5 text-xs text-rose-700 font-semibold mt-1">
                         <span class="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
@@ -379,7 +381,6 @@
     }
 
     function formatResponseText(text) {
-        // very basic markdown-style strong formatting replacement
         return text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
     }
 
