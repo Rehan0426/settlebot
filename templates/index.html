@@ -115,6 +115,34 @@
             color: #3182CE;
         }
 
+        /* Predictive responses styles */
+        .predictive-container {
+            padding: 10px 16px;
+            border-top: 1px solid var(--border-color);
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            background-color: #FFFFFF;
+        }
+
+        .predictive-chip {
+            background-color: #F1F5F9;
+            color: #475569;
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 6px 12px;
+            font-size: 12px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: all 0.2s ease;
+        }
+
+        .predictive-chip:hover {
+            background-color: #E2E8F0;
+            color: var(--text-dark);
+            border-color: #CBD5E1;
+        }
+
         .input-area {
             padding: 16px;
             border-top: 1px solid var(--border-color);
@@ -154,6 +182,23 @@
             background-color: #F1F5F9 !important;
             color: var(--text-dark) !important;
             padding: 10px !important;
+            border-radius: 50% !important;
+            width: 40px;
+            height: 40px;
+            transition: all 0.3s ease;
+        }
+
+        /* Animated Mic styles */
+        @keyframes mic-pulse {
+            0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
+            70% { transform: scale(1.15); box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); }
+            100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+        }
+
+        .mic-btn.listening {
+            background-color: #EF4444 !important;
+            color: #FFFFFF !important;
+            animation: mic-pulse 1.3s infinite;
         }
     </style>
 </head>
@@ -171,8 +216,14 @@
         </div>
     </div>
     
+    <!-- Predictive chips above input area -->
+    <div class="predictive-container" id="predictive-box">
+        <div class="predictive-chip" onclick="applyPredictive('What is the status of pay_tx_100001?')">Status of pay_tx_100001?</div>
+        <div class="predictive-chip" onclick="applyPredictive('How much was settled yesterday?')">Yesterday's settlement total?</div>
+    </div>
+    
     <div class="input-area">
-        <button class="mic-btn" onclick="startVoiceInput()" title="Voice Input">🎤</button>
+        <button class="mic-btn" id="mic-control" onclick="startVoiceInput()" title="Voice Input">🎤</button>
         <input type="text" id="query-input" placeholder="Ask about transaction pay_tx_100001 or 'kal ka settlement'..." onkeydown="handleKey(event)">
         <button onclick="sendMessage()">Send</button>
     </div>
@@ -185,6 +236,11 @@
         if (e.key === 'Enter') {
             sendMessage();
         }
+    }
+
+    function applyPredictive(question) {
+        document.getElementById("query-input").value = question;
+        sendMessage();
     }
 
     async function sendMessage() {
@@ -211,10 +267,48 @@
             
             removeLoading(loadingId);
             appendAgentMessage(data);
+
+            // Dynamically update predictive responses based on query keywords
+            updatePredictiveChips(query);
         } catch (e) {
             removeLoading(loadingId);
             appendMessage("Unable to connect to server.", "agent");
         }
+    }
+
+    function updatePredictiveChips(lastQuery) {
+        const box = document.getElementById("predictive-box");
+        box.innerHTML = "";
+        
+        let suggestions = [];
+        const qLower = lastQuery.toLowerCase();
+
+        if (qLower.includes("pay_tx")) {
+            // Context matches transaction queries
+            suggestions = [
+                { label: "Check its refund details?", text: "uska refund kitna hai?" },
+                { label: "What was the fee on this?", text: "Is context of this transaction, what was the fee and GST?" }
+            ];
+        } else if (qLower.includes("yesterday") || qLower.includes("kal")) {
+            suggestions = [
+                { label: "Show last week's aggregate?", text: "What is the settlement total of last week?" },
+                { label: "Settle kyu nahi hua pichla?", text: "kal ka settlement pending kyu tha?" }
+            ];
+        } else {
+            // General fallbacks
+            suggestions = [
+                { label: "How much settled last week?", text: "What is the settlement total of last week?" },
+                { label: "Show on hold transactions", text: "Which settlements are currently on_hold?" }
+            ];
+        }
+
+        suggestions.forEach(item => {
+            const div = document.createElement("div");
+            div.className = "predictive-chip";
+            div.innerText = item.label;
+            div.onclick = () => applyPredictive(item.text);
+            box.appendChild(div);
+        });
     }
 
     function appendMessage(text, role) {
@@ -304,17 +398,23 @@
             alert("Voice recognition is not supported in this browser.");
             return;
         }
+        
+        const micControl = document.getElementById("mic-control");
         const rec = new SpeechRecognition();
         rec.lang = "en-IN";
+        
         rec.onstart = () => {
+            micControl.className += " listening";
             document.getElementById("query-input").placeholder = "Listening...";
         };
         rec.onresult = (event) => {
             const text = event.results[0][0].transcript;
             document.getElementById("query-input").value = text;
+            micControl.classList.remove("listening");
             document.getElementById("query-input").placeholder = "Ask about transaction...";
         };
         rec.onend = () => {
+            micControl.classList.remove("listening");
             document.getElementById("query-input").placeholder = "Ask about transaction...";
         };
         rec.start();
