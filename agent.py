@@ -122,7 +122,8 @@ def call_tool(name, args):
     return {"error": "unknown_tool"}
 
 def ask_gemini(messages, tool_declarations):
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
+    model_name = "gemini-3.6-flash"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={GEMINI_API_KEY}"
     headers = {"Content-Type": "application/json"}
     contents = []
     for msg in messages:
@@ -149,7 +150,7 @@ def ask_groq(messages, openai_tools):
     for m in messages:
         groq_messages.append({"role": m["role"], "content": m.get("text", "")})
     payload = {
-        "model": "llama3-70b-8192",
+        "model": "openai/gpt-oss-120b",
         "messages": groq_messages,
         "tools": openai_tools,
         "tool_choice": "auto"
