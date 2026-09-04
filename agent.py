@@ -141,8 +141,11 @@ def ask_gemini(messages, tool_declarations):
         resp.raise_for_status()
         return resp.json()
     except Exception as e:
-        print(f"Gemini {model_name} failed: {str(e)}. Falling back to highly-capable gemini-1.5-flash...")
-        url_alt = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
+        print(f"Gemini {model_name} failed: {str(e)}.")
+        if hasattr(e, 'response') and e.response is not None:
+            print("Gemini response error details:", e.response.text)
+        print("Falling back to standard Gemini 1.5 Flash (v1 endpoint)...")
+        url_alt = f"https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
         resp = requests.post(url_alt, headers=headers, json=payload, timeout=10)
         resp.raise_for_status()
         return resp.json()
@@ -167,11 +170,21 @@ def ask_groq(messages, openai_tools):
         resp.raise_for_status()
         return resp.json()
     except Exception as e:
-        print(f"Groq llama-3.3-70b-versatile failed: {str(e)}. Retrying with llama-3.1-8b-instant...")
+        print(f"Groq llama-3.3-70b-versatile failed: {str(e)}.")
+        if hasattr(e, 'response') and e.response is not None:
+            print("Groq response error details:", e.response.text)
+        print("Retrying with standard llama-3.1-8b-instant on Groq...")
         payload["model"] = "llama-3.1-8b-instant"
-        resp = requests.post(url, headers=headers, json=payload, timeout=10)
-        resp.raise_for_status()
-        return resp.json()
+        try:
+            resp = requests.post(url, headers=headers, json=payload, timeout=10)
+            resp.raise_for_status()
+            return resp.json()
+        except Exception as ex:
+            print("Fallback to llama-3.1-8b-instant failed. Trying llama3-8b-8192...")
+            payload["model"] = "llama3-8b-8192"
+            resp = requests.post(url, headers=headers, json=payload, timeout=10)
+            resp.raise_for_status()
+            return resp.json()
 
 def run_agent_turn(query, session_memory):
     messages = list(session_memory.history)
