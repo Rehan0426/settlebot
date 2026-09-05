@@ -320,18 +320,9 @@
         const container = document.createElement("div");
         container.className = "flex justify-start items-start gap-3";
 
-        let toolTraceHtml = "";
+        // Tool call details are kept in the API metadata for debugging/eval,
+        // but are intentionally not rendered in the merchant-facing UI.
         const hasToolCalls = data.metadata && data.metadata.tool_calls_made && data.metadata.tool_calls_made.length > 0;
-        
-        if (hasToolCalls) {
-            const tc = data.metadata.tool_calls_made[0];
-            toolTraceHtml = `
-                <div class="text-[11px] text-on-surface-variant bg-surface-muted px-2.5 py-1 rounded-md mb-2 inline-flex items-center gap-1.5 font-mono">
-                    <span class="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
-                    Checked: ${tc.tool_name} (${JSON.stringify(tc.arguments)})
-                </div>
-            `;
-        }
 
         let confidenceHtml = "";
         if (data.metadata) {
@@ -365,7 +356,6 @@
             <img alt="SettleBot" class="w-7 h-7 rounded-lg object-contain bg-surface-card p-1 border border-outline-variant flex-shrink-0 mt-0.5" src="https://lh3.googleusercontent.com/aida/AEtjO1US-lABhBbqnBvLODDtba3I6GObMON_EA_2yQXC4PgerrvUudFcE7N2gDf7BoVseFUIrl2fbqvS9E69j8-tA1ccN3fqmO97VaKI_Ak7dbxw33NoI1Jr-GIGFN7rEXoOi8yNLzux0PReVB4T3MVAxWAYtv330cXCwvAE2IT1zYr2drLjLNMQQ0UUMicUbRdEVaZdp59-YzEzQxIxdePLju2j9P-3pQrzL3k63QaRAMxrxNTjxGJYvu5yfgk"/>
             <div class="flex flex-col gap-2 max-w-2xl w-full">
                 <div class="bg-surface-card border border-outline-variant rounded-2xl rounded-tl-sm p-5 text-sm text-on-surface shadow-sm space-y-3">
-                    ${toolTraceHtml}
                     <p class="leading-relaxed text-on-surface">${formatResponseText(data.answer)}</p>
                     ${confidenceHtml}
                 </div>
