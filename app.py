@@ -17,11 +17,24 @@ def chat():
     session_id = data.get("session_id", "default_session")
     
     if not query:
-        return jsonify({"error": "Query cannot be empty"}), 400
-        
-    session_memory = memory_manager.get_session(session_id)
-    response = run_agent_turn(query, session_memory)
-    
+        return jsonify({
+            "answer": "Please type a question before sending.",
+            "error": "empty_query",
+            "metadata": {"tool_calls_made": [], "grounding_status": "error", "model_used": None}
+        }), 400
+
+    try:
+        session_memory = memory_manager.get_session(session_id)
+        response = run_agent_turn(query, session_memory)
+    except Exception as e:
+        # Last line of defence: never leak a stack trace to the merchant UI.
+        app.logger.exception("Unhandled error in /api/chat: %s", e)
+        return jsonify({
+            "answer": "Something went wrong on SettleBot's side while processing your request. Please try again.",
+            "error": "server_error",
+            "metadata": {"tool_calls_made": [], "grounding_status": "error", "model_used": None}
+        }), 500
+
     return jsonify(response)
 
 @app.route("/api/eval", methods=["POST", "GET"])

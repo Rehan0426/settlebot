@@ -21,6 +21,20 @@ You strictly adhere to the following rules:
 - Do not describe how you found the answer (e.g. "I checked the settlement data"). Just give the answer directly.
 """
 
+# Merchant-facing messages for each error category. Keys are stable codes
+# returned in the API response so the UI (or logs) can distinguish them.
+ERROR_MESSAGES = {
+    "quota_exceeded": "SettleBot has reached its AI usage quota for now. Please wait a minute and try again.",
+    "auth_error": "SettleBot could not sign in to its AI service. Please ask your administrator to check the API key configuration.",
+    "not_configured": "SettleBot is not set up yet. An administrator needs to add an AI API key (GEMINI_API_KEY or GROQ_API_KEY) before it can answer questions.",
+    "timeout": "That took longer than expected and timed out. Please try again in a moment.",
+    "network_error": "SettleBot could not reach its AI service. Please check the internet connection and try again.",
+    "service_unavailable": "The AI service is temporarily unavailable. Please try again in a few minutes.",
+    "bad_request": "SettleBot couldn't process that request. Please try rephrasing your question.",
+    "no_answer": "I couldn't put together a complete answer for that. Could you rephrase or narrow down your question?",
+    "unknown_error": "Something went wrong while processing your request. Please try again.",
+}
+
 TOOLS_SCHEMA = [
     {
         "name": "get_settlement",
@@ -127,6 +141,7 @@ def call_tool(name, args):
 def ask_gemini(messages, tool_declarations):
     # This sandbox proxy environment supports the following Gemini models
     models = ["gemini-3.6-flash", "gemini-3.5-flash", "gemini-3.8-flash", "gemini-3.7-flash"]
+    last_error = None
     for model_name in models:
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={GEMINI_API_KEY}"
         headers = {"Content-Type": "application/json"}
@@ -146,10 +161,15 @@ def ask_gemini(messages, tool_declarations):
             resp.raise_for_status()
             return resp.json()
         except Exception as e:
+            last_error = e
             print(f"Gemini model {model_name} failed or rate-limited. Error: {str(e)}")
             if hasattr(e, 'response') and e.response is not None:
                 print(f"Gemini {model_name} error response body:", e.response.text)
             print(f"Proceeding to check alternative Gemini model in the sandbox proxy...")
+    # Re-raise the real underlying error so the caller can classify it
+    # (quota exceeded, auth failure, network issue, etc.).
+    if last_error is not None:
+        raise last_error
     raise Exception("All supported Gemini models in the sandbox proxy have failed.")
 
 def ask_groq(messages, openai_tools):
@@ -177,6 +197,49 @@ def ask_groq(messages, openai_tools):
             print("Groq response error details:", e.response.text)
         raise e
 
+def classify_error(e):
+    """Map a raw exception from an LLM/tool call to a stable error code.
+
+    The code is looked up in ERROR_MESSAGES to produce a merchant-friendly
+    message; the raw exception is only ever printed to server logs.
+    """
+    status = None
+    resp = getattr(e, "response", None)
+    if resp is not None:
+        status = getattr(resp, "status_code", None)
+
+    text = str(e).lower()
+    if resp is not None:
+        try:
+            text += " " + (resp.text or "").lower()
+        except Exception:
+            pass
+
+    if isinstance(e, requests.exceptions.Timeout) or "timed out" in text:
+        return "timeout"
+    if isinstance(e, requests.exceptions.ConnectionError) or "name resolution" in text or "connection refused" in text:
+        return "network_error"
+    if status == 429 or "quota" in text or "rate limit" in text or "rate_limit" in text or "resource_exhausted" in text:
+        return "quota_exceeded"
+    if status in (401, 403) or "api key" in text or "api_key" in text or "unauthorized" in text or "permission_denied" in text:
+        return "auth_error"
+    if status is not None and status >= 500:
+        return "service_unavailable"
+    if status == 400:
+        return "bad_request"
+    return "unknown_error"
+
+def build_error_response(code, tool_calls_made, model_used):
+    return {
+        "answer": ERROR_MESSAGES.get(code, ERROR_MESSAGES["unknown_error"]),
+        "error": code,
+        "metadata": {
+            "tool_calls_made": tool_calls_made,
+            "grounding_status": "error",
+            "model_used": model_used
+        }
+    }
+
 def run_agent_turn(query, session_memory):
     messages = list(session_memory.history)
     messages.append({"role": "user", "text": query})
@@ -184,13 +247,18 @@ def run_agent_turn(query, session_memory):
     grounding_status = "verified"
     model_used = "gemini-3.6-flash"
     response_text = ""
+    error_code = None
     gemini_funcs = to_gemini_function_declarations(TOOLS_SCHEMA)
     openai_tools = to_groq_openai_tools(TOOLS_SCHEMA)
+
+    if not GEMINI_API_KEY and not GROQ_API_KEY:
+        return build_error_response("not_configured", tool_calls_made, None)
+
     use_groq = False
     if not GEMINI_API_KEY:
         use_groq = True
-        model_used = "groq/openai-gpt-oss-120b"
-        
+        model_used = "groq/llama-3.1-8b-instant"
+
     max_iterations = 4
     for iteration in range(max_iterations):
         try:
@@ -234,29 +302,39 @@ def run_agent_turn(query, session_memory):
                     messages.append({"role": "assistant", "text": f"Calling tool {fn_name}"})
                     messages.append({"role": "user", "text": f"Tool response: {json.dumps(tool_result)}"})
                 else:
-                    response_text = msg.get("content", "")
+                    response_text = msg.get("content", "") or ""
                     break
         except Exception as e:
             print(f"Error on model iteration: {str(e)}")
+            code = classify_error(e)
+            # If Gemini failed (quota, auth, outage...) and Groq is configured, fall back once.
             if not use_groq and GROQ_API_KEY:
-                print("Switching to Groq fallback pathway...")
+                print(f"Gemini failed with '{code}'. Switching to Groq fallback pathway...")
                 use_groq = True
-                model_used = "groq/openai-gpt-oss-120b"
+                model_used = "groq/llama-3.1-8b-instant"
                 continue
-            else:
-                response_text = f"SettleBot mock response: Processed query '{query}'. (Keys not fully configured, please check GEMINI_API_KEY or GROQ_API_KEY)"
-                break
-                
+            error_code = code
+            break
+
+    if error_code:
+        # Do not store failed turns in memory so they don't pollute later context.
+        return build_error_response(error_code, tool_calls_made, model_used)
+
+    if not response_text.strip():
+        # The model kept calling tools and never produced a final answer.
+        return build_error_response("no_answer", tool_calls_made, model_used)
+
     if "No record found" in response_text or "not found" in response_text.lower():
         grounding_status = "not_found"
     elif "matlab" in response_text or "ya kal" in response_text:
         grounding_status = "clarification_needed"
     else:
         grounding_status = "verified"
-        
+
     session_memory.add_turn(query, response_text)
     return {
         "answer": response_text,
+        "error": None,
         "metadata": {
             "tool_calls_made": tool_calls_made,
             "grounding_status": grounding_status,
