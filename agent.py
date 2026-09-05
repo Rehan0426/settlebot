@@ -7,13 +7,22 @@ from tools import get_settlement, get_settlements_by_date, get_settlements_by_st
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
 
+# This sandbox proxy environment supports the following Gemini models, tried in order.
+GEMINI_MODELS = ["gemini-3.6-flash", "gemini-3.5-flash", "gemini-3.8-flash", "gemini-3.7-flash"]
+GROQ_MODEL = "llama-3.1-8b-instant"
+PROVIDER_GEMINI = "Google Gemini"
+PROVIDER_GROQ = "Groq"
+
 SYSTEM_PROMPT = """You are SettleBot, a professional AI Settlement Q&A Agent for Razorpay Merchants.
 You strictly adhere to the following rules:
 - You NEVER state any specific numbers (amounts, fees, GST, refund amounts, UTR numbers) unless they came from an actual tool call result in this conversation.
 - If a tool returns not-found or is empty, say so explicitly. Do not guess or fabricate a plausible answer.
-- You must resolve relative date phrases via the `resolve_relative_date` tool BEFORE calling any date-based tools (`get_settlements_by_date`, `sum_settlements`). Never perform date arithmetic yourself.
+- You must resolve any date or period phrase via the `resolve_relative_date` tool BEFORE calling date-based tools (`get_settlements_by_date`, `sum_settlements`). Never perform date arithmetic yourself.
+- Pass the ENTIRE period phrase exactly as the user wrote it to `resolve_relative_date` (e.g. 'last financial year', '2025 fiscal year', 'FY 2024-25', 'Q2 2025', 'last quarter', 'last 3 months', 'March 2026', 'next week', 'pichle mahine', '2025'). The tool understands Indian financial years (April to March), quarters, month names, calendar years, rolling windows, weekdays, explicit dates and 'X to Y' ranges, in English and Hinglish.
+- NEVER ask the user to provide specific dates or a date range when they have used any such phrase. Only ask for clarification if `resolve_relative_date` itself reports the phrase as ambiguous (e.g. 'kal'/'parso' with no tense hint) or unsupported.
+- When the tool returns a range, call `sum_settlements` with its start_date and end_date. When it returns a single date, call `get_settlements_by_date`.
+- In your answer, state the period you covered in plain words using the tool's label (e.g. 'for FY 2024-25 (1 Apr 2024 to 31 Mar 2025)') so the merchant knows exactly which dates were included.
 - Use conversation memory to resolve pronouns ("iska", "that one", "same transaction"), but always verify details by making a fresh tool call.
-- If a question or date reference is ambiguous (like 'kal' or 'parso' without clear past/future context), ask for clarification rather than assuming.
 - Keep conversation helpful and professional. Explain fee/GST/refund breakdowns clearly, avoiding jargon.
 - If the user asks in Hinglish, respond in natural Hinglish but format amounts in standard Indian format (e.g. ₹1,50,000).
 - The user is a business merchant, not a developer. NEVER mention tool names, function calls, API responses, JSON, or internal field names in your reply.
@@ -83,11 +92,11 @@ TOOLS_SCHEMA = [
     },
     {
         "name": "resolve_relative_date",
-        "description": "Resolves relative date phrases (Hinglish/English) like 'yesterday', 'kal', 'parso', 'pichle mahine' into concrete date format.",
+        "description": "Resolves any natural-language date or period phrase (English or Hinglish) into concrete dates. Handles: today/yesterday/kal/parso; last/this/next week, month, quarter, year; Indian financial years such as 'last financial year', 'FY 2024-25', 'FY25', '2025 fiscal year', 'FYTD'; quarters such as 'Q2 2025', 'Q1 FY25', 'last quarter'; month names such as 'March 2026', 'last January'; rolling windows such as 'last 3 months', 'past 30 days', '2 weeks ago'; weekdays such as 'last Friday'; explicit dates such as '24 Aug 2026' or '24/08/2026'; ranges such as '1 Aug to 15 Aug'; and bare years such as '2025'. Always call this instead of asking the user for exact dates.",
         "parameters": {
             "type": "object",
             "properties": {
-                "phrase": {"type": "string", "description": "The relative phrase (e.g., 'kal', 'last week')."},
+                "phrase": {"type": "string", "description": "The complete date/period phrase exactly as the user wrote it (e.g. 'last financial year', 'Q2 2025', 'last 3 months', 'kal')."},
                 "query": {"type": "string", "description": "The full user query/sentence to help detect grammatical tense hints."}
             },
             "required": ["phrase", "query"]
@@ -139,10 +148,9 @@ def call_tool(name, args):
     return {"error": "unknown_tool"}
 
 def ask_gemini(messages, tool_declarations):
-    # This sandbox proxy environment supports the following Gemini models
-    models = ["gemini-3.6-flash", "gemini-3.5-flash", "gemini-3.8-flash", "gemini-3.7-flash"]
+    """Call Gemini, falling through the supported model list. Returns (json, model_name)."""
     last_error = None
-    for model_name in models:
+    for model_name in GEMINI_MODELS:
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={GEMINI_API_KEY}"
         headers = {"Content-Type": "application/json"}
         contents = []
@@ -159,7 +167,7 @@ def ask_gemini(messages, tool_declarations):
         try:
             resp = requests.post(url, headers=headers, json=payload, timeout=10)
             resp.raise_for_status()
-            return resp.json()
+            return resp.json(), model_name
         except Exception as e:
             last_error = e
             print(f"Gemini model {model_name} failed or rate-limited. Error: {str(e)}")
@@ -182,7 +190,7 @@ def ask_groq(messages, openai_tools):
     for m in messages:
         groq_messages.append({"role": m["role"], "content": m.get("text", "")})
     payload = {
-        "model": "llama-3.1-8b-instant",
+        "model": GROQ_MODEL,
         "messages": groq_messages,
         "tools": openai_tools,
         "tool_choice": "auto"
@@ -192,7 +200,7 @@ def ask_groq(messages, openai_tools):
         resp.raise_for_status()
         return resp.json()
     except Exception as e:
-        print(f"Groq llama-3.1-8b-instant failed: {str(e)}.")
+        print(f"Groq {GROQ_MODEL} failed: {str(e)}.")
         if hasattr(e, 'response') and e.response is not None:
             print("Groq response error details:", e.response.text)
         raise e
@@ -229,14 +237,15 @@ def classify_error(e):
         return "bad_request"
     return "unknown_error"
 
-def build_error_response(code, tool_calls_made, model_used):
+def build_error_response(code, tool_calls_made, model_used, model_provider=None):
     return {
         "answer": ERROR_MESSAGES.get(code, ERROR_MESSAGES["unknown_error"]),
         "error": code,
         "metadata": {
             "tool_calls_made": tool_calls_made,
             "grounding_status": "error",
-            "model_used": model_used
+            "model_used": model_used,
+            "model_provider": model_provider
         }
     }
 
@@ -245,7 +254,9 @@ def run_agent_turn(query, session_memory):
     messages.append({"role": "user", "text": query})
     tool_calls_made = []
     grounding_status = "verified"
-    model_used = "gemini-3.6-flash"
+    # Filled in with the model that actually produced the answer.
+    model_used = None
+    model_provider = None
     response_text = ""
     error_code = None
     gemini_funcs = to_gemini_function_declarations(TOOLS_SCHEMA)
@@ -257,13 +268,15 @@ def run_agent_turn(query, session_memory):
     use_groq = False
     if not GEMINI_API_KEY:
         use_groq = True
-        model_used = "groq/llama-3.1-8b-instant"
+        model_used = GROQ_MODEL
+        model_provider = PROVIDER_GROQ
 
     max_iterations = 4
     for iteration in range(max_iterations):
         try:
             if not use_groq:
-                res = ask_gemini(messages, gemini_funcs)
+                res, model_used = ask_gemini(messages, gemini_funcs)
+                model_provider = PROVIDER_GEMINI
                 candidates = res.get("candidates", [])
                 if not candidates:
                     raise Exception("No candidates returned from Gemini")
@@ -286,6 +299,8 @@ def run_agent_turn(query, session_memory):
                     break
             else:
                 res = ask_groq(messages, openai_tools)
+                model_used = GROQ_MODEL
+                model_provider = PROVIDER_GROQ
                 choice = res["choices"][0]
                 msg = choice["message"]
                 if "tool_calls" in msg and msg["tool_calls"]:
@@ -311,18 +326,19 @@ def run_agent_turn(query, session_memory):
             if not use_groq and GROQ_API_KEY:
                 print(f"Gemini failed with '{code}'. Switching to Groq fallback pathway...")
                 use_groq = True
-                model_used = "groq/llama-3.1-8b-instant"
+                model_used = GROQ_MODEL
+                model_provider = PROVIDER_GROQ
                 continue
             error_code = code
             break
 
     if error_code:
         # Do not store failed turns in memory so they don't pollute later context.
-        return build_error_response(error_code, tool_calls_made, model_used)
+        return build_error_response(error_code, tool_calls_made, model_used, model_provider)
 
     if not response_text.strip():
         # The model kept calling tools and never produced a final answer.
-        return build_error_response("no_answer", tool_calls_made, model_used)
+        return build_error_response("no_answer", tool_calls_made, model_used, model_provider)
 
     if "No record found" in response_text or "not found" in response_text.lower():
         grounding_status = "not_found"
@@ -338,6 +354,7 @@ def run_agent_turn(query, session_memory):
         "metadata": {
             "tool_calls_made": tool_calls_made,
             "grounding_status": grounding_status,
-            "model_used": model_used
+            "model_used": model_used,
+            "model_provider": model_provider
         }
     }
