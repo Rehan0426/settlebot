@@ -1,4 +1,13 @@
 import os
+
+# Load API keys from a local .env file if python-dotenv is available.
+# Environment variables that are already set always take precedence.
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
 from flask import Flask, request, jsonify, render_template
 from memory import memory_manager
 from agent import run_agent_turn
