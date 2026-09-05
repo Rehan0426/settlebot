@@ -231,7 +231,7 @@
         container.className = "flex justify-end items-start gap-3";
         container.innerHTML = `
             <div class="bg-primary text-on-primary rounded-2xl rounded-tr-sm px-4 py-3 text-sm leading-relaxed max-w-xl shadow-sm">
-                ${text}
+                ${escapeHtml(text)}
             </div>
             <img alt="Pooja" class="w-7 h-7 rounded-full object-cover flex-shrink-0 mt-0.5" src="https://lh3.googleusercontent.com/aida/AEtjO1USALv0bI2a2-iI2Sh9MIo86bsu4d3Q-uEQOEVH6ubGQqJ23xIesWp8Dvrwsg97CKcqqVoN7DwZlQ4lUEBvsSrXx_8Ee88Wuek3ajs0_BU4NuUWeU1_Z2yYUcMAJBL3hUub3RcsugFNrOMYN9E0SeQzMsJmizmkMugS7Eh-3kTj02Kun4xC0o5Gv5xYIO1LiRqwwue4L88mU9MYZy5_F2YPL_uMabnGoxkSxMC26yKjsO2tGS8XHD8J468"/>
         `;
@@ -340,7 +340,7 @@
             <img alt="SettleBot" class="w-7 h-7 rounded-lg object-contain bg-surface-card p-1 border border-outline-variant flex-shrink-0 mt-0.5" src="https://lh3.googleusercontent.com/aida/AEtjO1US-lABhBbqnBvLODDtba3I6GObMON_EA_2yQXC4PgerrvUudFcE7N2gDf7BoVseFUIrl2fbqvS9E69j8-tA1ccN3fqmO97VaKI_Ak7dbxw33NoI1Jr-GIGFN7rEXoOi8yNLzux0PReVB4T3MVAxWAYtv330cXCwvAE2IT1zYr2drLjLNMQQ0UUMicUbRdEVaZdp59-YzEzQxIxdePLju2j9P-3pQrzL3k63QaRAMxrxNTjxGJYvu5yfgk"/>
             <div class="flex flex-col gap-2 max-w-2xl w-full">
                 <div class="bg-surface-card border border-outline-variant rounded-2xl rounded-tl-sm p-5 text-sm text-on-surface shadow-sm space-y-3">
-                    <p class="leading-relaxed text-on-surface">${formatResponseText(data.answer)}</p>
+                    <div class="leading-relaxed text-on-surface space-y-3">${formatResponseText(data.answer)}</div>
                     ${(confidenceHtml || modelHtml) ? `
                     <div class="flex items-center justify-between gap-2 flex-wrap pt-1">
                         <div>${confidenceHtml}</div>
@@ -348,7 +348,7 @@
                     </div>` : ""}
                 </div>
                 <div class="flex gap-2">
-                    <button class="text-xs text-on-surface-variant hover:text-on-surface flex items-center gap-1" onclick="speak(\`${escapeQuote(data.answer)}\`)">
+                    <button class="text-xs text-on-surface-variant hover:text-on-surface flex items-center gap-1" onclick="speak(\`${escapeQuote(plainTextForSpeech(data.answer))}\`)">
                         <span class="material-symbols-outlined text-sm">volume_up</span> Speak
                     </button>
                 </div>
@@ -358,8 +358,146 @@
         scrollToBottom();
     }
 
+    // ---------------------------------------------------------------
+    // Response rendering
+    // Turns the model's markdown-ish answer into HTML. Supports tables,
+    // "- Label: value" groups (rendered as a two-column table), bullet and
+    // numbered lists, headings, bold and inline code. Everything is escaped
+    // before it reaches the DOM.
+    // ---------------------------------------------------------------
+
+    function escapeHtml(str) {
+        return String(str == null ? "" : str)
+            .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+    }
+
+    function inlineFormat(text) {
+        return escapeHtml(text)
+            .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+            .replace(/`([^`]+)`/g, '<code class="px-1 py-0.5 rounded bg-surface-muted text-[12px]">$1</code>');
+    }
+
+    const RE_TABLE_LINE = /^\s*\|.*\|\s*$/;
+    const RE_TABLE_SEP  = /^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?\s*$/;
+    const RE_BULLET     = /^\s*[-*\u2022]\s+(.+)$/;
+    const RE_NUMBERED   = /^\s*\d+[.)]\s+(.+)$/;
+    const RE_HEADING    = /^\s*#{1,6}\s+(.+)$/;
+    const RE_KEY_VALUE  = /^\*{0,2}([^:|*]{1,60}?)\*{0,2}\s*:\s*(.+)$/;
+    const RE_TOTAL_ROW  = /\b(net|total|grand total|payable|final)\b/i;
+
+    function renderTable(headers, rows) {
+        const colCount = Math.max(headers.length, ...rows.map(r => r.length));
+        const cellClass = (i) => i === 0
+            ? "py-2 pl-3 pr-2 text-left"
+            : "py-2 px-3 text-right tabular-nums whitespace-nowrap";
+
+        let head = "";
+        if (headers.length) {
+            head = `<thead><tr class="bg-surface-muted/70">${headers.map((h, i) =>
+                `<th class="${cellClass(i)} text-[11px] uppercase tracking-wider text-on-surface-variant font-semibold border-b border-outline-variant">${inlineFormat(h)}</th>`
+            ).join("")}</tr></thead>`;
+        }
+
+        const body = rows.map((cells, idx) => {
+            const padded = cells.concat(Array(Math.max(0, colCount - cells.length)).fill(""));
+            const isTotal = RE_TOTAL_ROW.test(padded[0]);
+            const rowClass = isTotal
+                ? "bg-surface-muted/60 font-semibold text-primary border-t-2 border-outline"
+                : (idx < rows.length - 1 ? "border-b border-outline-variant/60" : "");
+            return `<tr class="${rowClass}">${padded.map((c, i) =>
+                `<td class="${cellClass(i)} ${i === 0 && !isTotal ? "text-on-surface-variant" : ""}">${inlineFormat(c)}</td>`
+            ).join("")}</tr>`;
+        }).join("");
+
+        return `<div class="overflow-x-auto rounded-xl border border-outline-variant bg-surface-card">
+            <table class="w-full text-sm border-collapse">${head}<tbody>${body}</tbody></table>
+        </div>`;
+    }
+
     function formatResponseText(text) {
-        return text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+        let src = String(text == null ? "" : text).replace(/\r/g, "");
+        // If the model put several "- Label: value" items on one line, break them apart.
+        src = src.replace(/\s+-\s+(?=[^:\n]{1,60}:\s)/g, "\n- ");
+
+        const lines = src.split("\n");
+        const out = [];
+        let i = 0;
+
+        while (i < lines.length) {
+            const line = lines[i];
+            if (!line.trim()) { i++; continue; }
+
+            // Markdown table block
+            if (RE_TABLE_LINE.test(line)) {
+                const block = [];
+                while (i < lines.length && RE_TABLE_LINE.test(lines[i])) { block.push(lines[i]); i++; }
+                const parseRow = l => l.trim().replace(/^\|/, "").replace(/\|$/, "").split("|").map(c => c.trim());
+                let rows = block.map(parseRow);
+                let headers = [];
+                if (block.length >= 2 && RE_TABLE_SEP.test(block[1])) {
+                    headers = rows[0];
+                    rows = rows.slice(2);
+                }
+                rows = rows.filter(r => r.some(c => c));
+                if (rows.length) out.push(renderTable(headers, rows));
+                continue;
+            }
+
+            // Bullet block: "- Label: value" groups become a table, otherwise a list
+            if (RE_BULLET.test(line)) {
+                const items = [];
+                while (i < lines.length && RE_BULLET.test(lines[i])) { items.push(lines[i].match(RE_BULLET)[1].trim()); i++; }
+                const kv = items.map(t => t.match(RE_KEY_VALUE));
+                if (items.length >= 2 && kv.every(Boolean)) {
+                    out.push(renderTable([], kv.map(m => [m[1].trim(), m[2].trim()])));
+                } else {
+                    out.push(`<ul class="list-disc pl-5 space-y-1">${items.map(t => `<li>${inlineFormat(t)}</li>`).join("")}</ul>`);
+                }
+                continue;
+            }
+
+            // Numbered list
+            if (RE_NUMBERED.test(line)) {
+                const items = [];
+                while (i < lines.length && RE_NUMBERED.test(lines[i])) { items.push(lines[i].match(RE_NUMBERED)[1].trim()); i++; }
+                out.push(`<ol class="list-decimal pl-5 space-y-1">${items.map(t => `<li>${inlineFormat(t)}</li>`).join("")}</ol>`);
+                continue;
+            }
+
+            // Heading
+            if (RE_HEADING.test(line)) {
+                out.push(`<p class="font-semibold text-primary">${inlineFormat(line.match(RE_HEADING)[1])}</p>`);
+                i++;
+                continue;
+            }
+
+            // Paragraph: consecutive plain lines
+            const para = [];
+            while (i < lines.length && lines[i].trim()
+                   && !RE_TABLE_LINE.test(lines[i]) && !RE_BULLET.test(lines[i])
+                   && !RE_NUMBERED.test(lines[i]) && !RE_HEADING.test(lines[i])) {
+                para.push(lines[i].trim());
+                i++;
+            }
+            out.push(`<p>${para.map(inlineFormat).join("<br>")}</p>`);
+        }
+
+        return out.join("");
+    }
+
+    // Strip markdown so the Speak button reads natural text, not pipes and dashes.
+    function plainTextForSpeech(text) {
+        return String(text == null ? "" : text)
+            .replace(/^\s*\|?\s*:?-{2,}.*$/gm, "")          // table separator rows
+            .replace(/\|/g, ", ")                            // table cell separators
+            .replace(/^\s*[-*\u2022]\s+/gm, "")              // bullets
+            .replace(/^\s*#{1,6}\s+/gm, "")                  // headings
+            .replace(/\*\*(.+?)\*\*/g, "$1")                 // bold
+            .replace(/`([^`]+)`/g, "$1")                     // inline code
+            .replace(/\s*,\s*,+/g, ",")
+            .replace(/\s+/g, " ")
+            .trim();
     }
 
     function escapeQuote(str) {

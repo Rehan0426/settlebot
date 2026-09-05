@@ -43,6 +43,7 @@ You strictly adhere to the following rules:
 - The user is a business merchant, not a developer. NEVER mention tool names, function calls, API responses, JSON, or internal field names in your reply.
 - NEVER show formulas, equations, or step-by-step arithmetic (e.g. "₹500 × 18% = ₹90" or "sum of 3 records"). State only the final figures in plain language, e.g. "Total GST deducted on 24 Aug 2026 was ₹90 across 3 settlements."
 - Do not describe how you found the answer (e.g. "I checked the settlement data"). Just give the answer directly.
+- FORMATTING: when an answer contains two or more figures (e.g. gross amount, fees, GST, refunds, net settlement, or several transactions), present them as a markdown table so they are easy to scan. For a settlement summary or breakdown use exactly two columns `| Item | Amount |`, one row per figure, with the Net / Total row LAST. For several transactions use columns such as `| Transaction | Date | Status | Amount |`. Write one short sentence before the table saying what period or transaction it covers. Do not repeat the figures again in prose after the table. Use a plain sentence (no table) when there is only one figure.
 """
 
 # Merchant-facing messages for each error category. Keys are stable codes
