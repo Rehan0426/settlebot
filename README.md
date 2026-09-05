@@ -27,6 +27,15 @@ cp .env.example .env      # Windows: copy .env.example .env
 
 `.env` is git-ignored. Never commit real API keys.
 
+### Model order
+
+SettleBot tries providers and models in this order and shows the one that answered in a small badge under each reply:
+
+1. **Google Gemini** (`GEMINI_API_KEY`): `gemini-3.6-flash`, then the other supported Gemini models
+2. **Groq** (`GROQ_API_KEY`): `qwen/qwen3.8-27b`, then `openai/gpt-oss-120b`
+
+To change the Groq order or add a model, set `GROQ_MODELS` in `.env` as a comma-separated list. Model IDs must match Groq's catalogue exactly.
+
 ## Run
 
 ```bash

@@ -2,14 +2,29 @@ import os
 import requests
 import json
 import re
+
+# Load API keys from a local .env file if python-dotenv is available.
+# Environment variables that are already set always take precedence.
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
 from tools import get_settlement, get_settlements_by_date, get_settlements_by_status, sum_settlements, resolve_relative_date
 
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
 
-# This sandbox proxy environment supports the following Gemini models, tried in order.
+# Primary provider. This sandbox proxy environment supports these Gemini models, tried in order.
 GEMINI_MODELS = ["gemini-3.6-flash", "gemini-3.5-flash", "gemini-3.8-flash", "gemini-3.7-flash"]
-GROQ_MODEL = "llama-3.1-8b-instant"
+
+# Fallback provider (Groq), used only when every Gemini model fails or no Gemini key is set.
+# Models are tried in order. Override without code changes via a comma-separated env var:
+#   GROQ_MODELS="openai/gpt-oss-120b,qwen/qwen3.8-27b"
+DEFAULT_GROQ_MODELS = ["qwen/qwen3.8-27b", "openai/gpt-oss-120b"]
+GROQ_MODELS = [m.strip() for m in os.environ.get("GROQ_MODELS", "").split(",") if m.strip()] or DEFAULT_GROQ_MODELS
+
 PROVIDER_GEMINI = "Google Gemini"
 PROVIDER_GROQ = "Groq"
 
@@ -181,6 +196,7 @@ def ask_gemini(messages, tool_declarations):
     raise Exception("All supported Gemini models in the sandbox proxy have failed.")
 
 def ask_groq(messages, openai_tools):
+    """Call Groq, falling through GROQ_MODELS in order. Returns (json, model_name)."""
     url = "https://api.groq.com/openai/v1/chat/completions"
     headers = {
         "Content-Type": "application/json",
@@ -189,21 +205,37 @@ def ask_groq(messages, openai_tools):
     groq_messages = [{"role": "system", "content": SYSTEM_PROMPT}]
     for m in messages:
         groq_messages.append({"role": m["role"], "content": m.get("text", "")})
-    payload = {
-        "model": GROQ_MODEL,
-        "messages": groq_messages,
-        "tools": openai_tools,
-        "tool_choice": "auto"
-    }
-    try:
-        resp = requests.post(url, headers=headers, json=payload, timeout=10)
-        resp.raise_for_status()
-        return resp.json()
-    except Exception as e:
-        print(f"Groq {GROQ_MODEL} failed: {str(e)}.")
-        if hasattr(e, 'response') and e.response is not None:
-            print("Groq response error details:", e.response.text)
-        raise e
+
+    last_error = None
+    for model_name in GROQ_MODELS:
+        payload = {
+            "model": model_name,
+            "messages": groq_messages,
+            "tools": openai_tools,
+            "tool_choice": "auto"
+        }
+        try:
+            # Larger models such as gpt-oss-120b can take longer than the Gemini path.
+            resp = requests.post(url, headers=headers, json=payload, timeout=20)
+            resp.raise_for_status()
+            data = resp.json()
+            if not data.get("choices"):
+                raise Exception(f"Groq {model_name} returned no choices")
+            return data, model_name
+        except Exception as e:
+            last_error = e
+            print(f"Groq model {model_name} failed: {str(e)}")
+            resp_obj = getattr(e, "response", None)
+            if resp_obj is not None:
+                print(f"Groq {model_name} error response body:", resp_obj.text)
+                # A bad key fails for every model; don't burn calls on the rest.
+                if getattr(resp_obj, "status_code", None) in (401, 403):
+                    break
+            print("Trying next Groq model...")
+    # Re-raise the real underlying error so the caller can classify it.
+    if last_error is not None:
+        raise last_error
+    raise Exception("All configured Groq models failed.")
 
 def classify_error(e):
     """Map a raw exception from an LLM/tool call to a stable error code.
@@ -268,7 +300,6 @@ def run_agent_turn(query, session_memory):
     use_groq = False
     if not GEMINI_API_KEY:
         use_groq = True
-        model_used = GROQ_MODEL
         model_provider = PROVIDER_GROQ
 
     max_iterations = 4
@@ -298,8 +329,7 @@ def run_agent_turn(query, session_memory):
                     response_text = part.get("text", "")
                     break
             else:
-                res = ask_groq(messages, openai_tools)
-                model_used = GROQ_MODEL
+                res, model_used = ask_groq(messages, openai_tools)
                 model_provider = PROVIDER_GROQ
                 choice = res["choices"][0]
                 msg = choice["message"]
@@ -318,6 +348,8 @@ def run_agent_turn(query, session_memory):
                     messages.append({"role": "user", "text": f"Tool response: {json.dumps(tool_result)}"})
                 else:
                     response_text = msg.get("content", "") or ""
+                    # Reasoning models (e.g. Qwen) may wrap their thinking in <think> tags.
+                    response_text = re.sub(r"<think>.*?</think>", "", response_text, flags=re.S).strip()
                     break
         except Exception as e:
             print(f"Error on model iteration: {str(e)}")
@@ -326,7 +358,7 @@ def run_agent_turn(query, session_memory):
             if not use_groq and GROQ_API_KEY:
                 print(f"Gemini failed with '{code}'. Switching to Groq fallback pathway...")
                 use_groq = True
-                model_used = GROQ_MODEL
+                model_used = None
                 model_provider = PROVIDER_GROQ
                 continue
             error_code = code
