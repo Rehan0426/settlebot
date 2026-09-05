@@ -213,7 +213,7 @@
                 const message = (data && data.answer)
                     ? data.answer
                     : "SettleBot ran into a problem while processing your request. Please try again.";
-                appendErrorMessage(message);
+                appendErrorMessage(message, data ? data.metadata : null);
                 return;
             }
 
@@ -239,10 +239,23 @@
         scrollToBottom();
     }
 
-    function appendErrorMessage(text) {
+    // Small pill showing which AI model produced the reply, e.g. "Google Gemini · gemini-3.6-flash".
+    function buildModelBadge(metadata) {
+        if (!metadata || !metadata.model_used) return "";
+        const provider = metadata.model_provider ? `${metadata.model_provider} · ` : "";
+        return `
+            <div class="inline-flex items-center gap-1 text-[11px] text-on-surface-variant bg-surface-muted border border-outline-variant/60 px-2 py-0.5 rounded-full whitespace-nowrap" title="AI model that generated this answer">
+                <span class="material-symbols-outlined text-[13px]">smart_toy</span>
+                ${provider}${metadata.model_used}
+            </div>
+        `;
+    }
+
+    function appendErrorMessage(text, metadata) {
         const history = document.getElementById("chat-history");
         const container = document.createElement("div");
         container.className = "flex justify-start items-start gap-3";
+        const modelHtml = buildModelBadge(metadata);
         container.innerHTML = `
             <img alt="SettleBot" class="w-7 h-7 rounded-lg object-contain bg-surface-card p-1 border border-outline-variant flex-shrink-0 mt-0.5" src="https://lh3.googleusercontent.com/aida/AEtjO1US-lABhBbqnBvLODDtba3I6GObMON_EA_2yQXC4PgerrvUudFcE7N2gDf7BoVseFUIrl2fbqvS9E69j8-tA1ccN3fqmO97VaKI_Ak7dbxw33NoI1Jr-GIGFN7rEXoOi8yNLzux0PReVB4T3MVAxWAYtv330cXCwvAE2IT1zYr2drLjLNMQQ0UUMicUbRdEVaZdp59-YzEzQxIxdePLju2j9P-3pQrzL3k63QaRAMxrxNTjxGJYvu5yfgk"/>
             <div class="flex flex-col gap-3 max-w-2xl w-full">
@@ -252,6 +265,7 @@
                         Something went wrong
                     </div>
                     <p class="leading-relaxed text-on-surface">${text}</p>
+                    ${modelHtml ? `<div class="flex justify-end pt-1">${modelHtml}</div>` : ""}
                 </div>
             </div>
         `;
@@ -320,12 +334,18 @@
             }
         }
 
+        const modelHtml = buildModelBadge(data.metadata);
+
         container.innerHTML = `
             <img alt="SettleBot" class="w-7 h-7 rounded-lg object-contain bg-surface-card p-1 border border-outline-variant flex-shrink-0 mt-0.5" src="https://lh3.googleusercontent.com/aida/AEtjO1US-lABhBbqnBvLODDtba3I6GObMON_EA_2yQXC4PgerrvUudFcE7N2gDf7BoVseFUIrl2fbqvS9E69j8-tA1ccN3fqmO97VaKI_Ak7dbxw33NoI1Jr-GIGFN7rEXoOi8yNLzux0PReVB4T3MVAxWAYtv330cXCwvAE2IT1zYr2drLjLNMQQ0UUMicUbRdEVaZdp59-YzEzQxIxdePLju2j9P-3pQrzL3k63QaRAMxrxNTjxGJYvu5yfgk"/>
             <div class="flex flex-col gap-2 max-w-2xl w-full">
                 <div class="bg-surface-card border border-outline-variant rounded-2xl rounded-tl-sm p-5 text-sm text-on-surface shadow-sm space-y-3">
                     <p class="leading-relaxed text-on-surface">${formatResponseText(data.answer)}</p>
-                    ${confidenceHtml}
+                    ${(confidenceHtml || modelHtml) ? `
+                    <div class="flex items-center justify-between gap-2 flex-wrap pt-1">
+                        <div>${confidenceHtml}</div>
+                        ${modelHtml}
+                    </div>` : ""}
                 </div>
                 <div class="flex gap-2">
                     <button class="text-xs text-on-surface-variant hover:text-on-surface flex items-center gap-1" onclick="speak(\`${escapeQuote(data.answer)}\`)">
@@ -366,6 +386,7 @@
         } else {
             suggestions = [
                 { label: "How much settled last week?", text: "What is the settlement total of last week?" },
+                { label: "Last financial year total?", text: "How much was settled in the last financial year?" },
                 { label: "Show on hold transactions", text: "Which settlements are currently on_hold?" }
             ];
         }
